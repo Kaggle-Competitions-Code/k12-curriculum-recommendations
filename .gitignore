@@ -1,0 +1,8 @@
+**/*.csv
+**/*.pkl
+**/*.pqt
+**/*.parquet
+**/*.m
+**/*.pth
+**/.ipynb_checkpoints
+data/
