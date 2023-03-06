@@ -58,7 +58,7 @@ class Convert2Embed(object):
     def convert2embeddind(self, df, label_name=""):
         embed: list = []
         dataset = PlainDataset(df, tokenizer=self.tokenizer, label_name=label_name)
-        dataloader = DataLoader(dataset, sampler=SequentialSampler(dataset), batch_size=32)
+        dataloader = DataLoader(dataset, sampler=SequentialSampler(dataset), batch_size=64)
         for batch in dataloader:
             batch = {k: v.cuda() for k, v in batch.items()}
             with torch.no_grad():
@@ -68,19 +68,19 @@ class Convert2Embed(object):
         return embed
 
     def get_embed(self):
-        with open(os.path.join(OUTPUT_PATH, "valid", "language.txt"), "r") as f:
+        with open(os.path.join(OUTPUT_PATH, "stage2", "language.txt"), "r") as f:
             valid_language = f.read().splitlines()
 
         for p in tqdm(valid_language):
             for t in ["content", "topics"]:
-                path = os.path.join(OUTPUT_PATH, "valid", p, f"{t}_{p}.pqt")
+                path = os.path.join(OUTPUT_PATH, "stage2", p, f"{t}_{p}.pqt")
                 df = pd.read_parquet(path)
                 embed = self.convert2embeddind(df, label_name=f"{t}_text")
                 np.save(path.replace(".pqt", ".npy"), embed)
 
 
-def valid():
-    with open(os.path.join(OUTPUT_PATH, "valid", "language.txt"), "r") as f:
+def generate_stage2_data():
+    with open(os.path.join(OUTPUT_PATH, "stage2", "language.txt"), "r") as f:
         valid_language = f.read().splitlines()
 
     recall_amount = 0
@@ -89,9 +89,9 @@ def valid():
     recall_total = {}
     stage2_data = []
     for p in tqdm(valid_language):
-        content_path = os.path.join(OUTPUT_PATH, "valid", p, f"content_{p}.npy")
-        topics_path = os.path.join(OUTPUT_PATH, "valid", p, f"topics_{p}.npy")
-        correlations_path = os.path.join(OUTPUT_PATH, "valid", p, f"correlations_{p}.pqt")
+        content_path = os.path.join(OUTPUT_PATH, "stage2", p, f"content_{p}.npy")
+        topics_path = os.path.join(OUTPUT_PATH, "stage2", p, f"topics_{p}.npy")
+        correlations_path = os.path.join(OUTPUT_PATH, "stage2", p, f"correlations_{p}.pqt")
         content_array = np.load(content_path)
         topics_array = np.load(topics_path)
         model = NearestNeighbors(n_neighbors=50, metric="cosine")
@@ -139,7 +139,8 @@ def valid():
     df_stage2_data.to_parquet("/home/search3/lichunyu/k12-curriculum-recommendations/data/output/stage2/recall.pqt")
 
 
+
 if __name__ == "__main__":
-    # P = Convert2Embed()
-    # P.get_embed()
-    valid()
+    P = Convert2Embed()
+    P.get_embed()
+    generate_stage2_data()

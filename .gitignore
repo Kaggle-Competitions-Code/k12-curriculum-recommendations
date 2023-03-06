@@ -6,3 +6,5 @@
 **/*.pth
 **/.ipynb_checkpoints
 data/
+tmp/
+src/output_dir/
