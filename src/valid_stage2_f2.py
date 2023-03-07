@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import json
 
 from tqdm import tqdm
+import polars as pl
 import pandas as pd
 import numpy as np
 import torch
@@ -101,7 +102,7 @@ if __name__ == "__main__":
     #     num_labels=2
     # )
     # model.load_state_dict(
-    #     torch.load("/home/search3/lichunyu/k12-curriculum-recommendations/src/output_dir/k12_stage2/checkpoint-26984/pytorch_model.bin", map_location=torch.device("cpu"))
+    #     torch.load("/home/search3/lichunyu/k12-curriculum-recommendations/src/output_dir/k12_stage2/checkpoint-94444/pytorch_model.bin", map_location=torch.device("cpu"))
     # )
     # dataloader = DataLoader(valid_dataset, sampler=SequentialSampler(valid_dataset), batch_size=64)
     # result = []
@@ -115,21 +116,47 @@ if __name__ == "__main__":
 
     # df_retrival = pd.concat([df_valid[["topic_id", "content_ids"]],  pd.DataFrame({"prob": result})], axis=1)
     # df_retrival.to_parquet("retrival.pqt")
+
+    best_f2_score = 0.0
+    best_threshold = 0.0
+    best_topn = 1
     f2_dict = {}
-    for p in np.arange(0.01, 0.15, 0.01):
-        df_retrival = pd.read_parquet("retrival.pqt")
-        # df_retrival_top = df_retrival.sort_values(["topic_id", "prob"], ascending=[True, False]).groupby("topic_id").head(1)
-        df_retrival_top = df_retrival.groupby("topic_id").head(3)
-        df_retrival = df_retrival[df_retrival["prob"]>=p].reset_index(drop=True)[["topic_id", "content_ids"]]
-        df_label = pd.read_parquet("/home/search3/lichunyu/k12-curriculum-recommendations/data/input/kflod_data/flod0/valid_correlations_flod0_no_source.pqt")
-        df_filler = df_retrival_top[~df_retrival_top["topic_id"].isin(df_retrival["topic_id"].unique())]
-        if len(df_filler)>0:
-            df_retrival = pd.concat([df_retrival, df_filler])[["topic_id", "content_ids"]]
-        recall = len(df_label.merge(df_retrival, on=["topic_id", "content_ids"], how="inner"))/len(df_label)
-        prec = len(df_label.merge(df_retrival, on=["topic_id", "content_ids"], how="inner"))/len(df_retrival)
-        f2 = 5*(recall*prec)/(4*prec+recall)
-        f2_dict[str(p)]: f2
-        print(f"F2@{p}: {f2}")
+    for topn in range(1,10):
+        for p in np.arange(0.01, 0.3, 0.01):
+            df_retrival = pd.read_parquet("retrival_67460.pqt")
+            # df_retrival_top = df_retrival.sort_values(["topic_id", "prob"], ascending=[True, False]).groupby("topic_id").head(25)
+            df_retrival_top = df_retrival.groupby("topic_id").head(topn)
+            df_retrival = df_retrival[df_retrival["prob"]>=p].reset_index(drop=True)[["topic_id", "content_ids"]]
+            df_label = pd.read_parquet("/home/search3/lichunyu/k12-curriculum-recommendations/data/input/kflod_data/flod0/valid_correlations_flod0_no_source.pqt")
+            df_filler = df_retrival_top[~df_retrival_top["topic_id"].isin(df_retrival["topic_id"].unique())]
+            if len(df_filler)>0:
+                df_retrival = pd.concat([df_retrival, df_filler])[["topic_id", "content_ids"]]
+
+            df_retrival["recall_label"] = 1
+            df_label = df_label.merge(df_retrival, on=["topic_id", "content_ids"], how="left").fillna({"recall_label": 0})
+            df_label["recall_label"] = df_label["recall_label"].astype("int")
+            df_recall = pl.DataFrame(df_label).groupby("topic_id").agg([(pl.col("recall_label").sum()/pl.col("recall_label").count()).alias("recall")])
+            df_label["prec_label"] = 1
+            df_retrival = df_retrival[["topic_id", "content_ids"]].merge(
+                df_label[["topic_id", "content_ids", "prec_label"]], on=["topic_id", "content_ids"], how="left"
+                ).fillna({"prec_label": 0})
+            df_retrival["prec_label"] = df_retrival["prec_label"].astype("int")
+            df_prec = pl.DataFrame(df_retrival).groupby("topic_id").agg([(pl.col("prec_label").sum()/pl.col("prec_label").count()).alias("prec")])
+            df_f2 = df_prec.join(df_recall, on="topic_id")
+            f2 = df_f2.with_columns([(5*pl.col("recall")*pl.col("prec")/(5*pl.col("prec")+pl.col("recall"))).alias("f2")]).fill_nan(pl.lit(0))["f2"].mean()
+
+            if f2 > best_f2_score:
+                best_f2_score = f2
+                best_threshold = p
+                best_topn = topn
+
+            # recall = len(df_label.merge(df_retrival, on=["topic_id", "content_ids"], how="inner"))/len(df_label)
+            # prec = len(df_label.merge(df_retrival, on=["topic_id", "content_ids"], how="inner"))/len(df_retrival)
+            # f2 = 5*(recall*prec)/(4*prec+recall)
+            f2_dict[f"F2@{p}&topn@{topn}"] = f2
+            print(f"F2@{p}&topn@{topn}: {f2}")
     with open("f2_score.json", "w") as f:
         f.write(json.dumps(f2_dict, ensure_ascii=False, indent=4))
+    print(f"Best F2 Score is: {best_f2_score}")
+    print(f"Best Strategy is: Threshold={best_threshold}, Fill topn={best_topn}")
     ...
