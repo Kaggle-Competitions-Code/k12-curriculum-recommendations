@@ -81,7 +81,7 @@ class RerankModel(nn.Module):
 
 class PairDataset(Dataset):
 
-    def __init__(self, df, tokenizer, data_name: list=None, label_name: str="label", max_length=256) -> None:
+    def __init__(self, df, tokenizer, data_name: list=None, label_name: str="label", max_length=312) -> None:
         super().__init__()
         self.data0 = df[data_name[0]].tolist()
         self.data1 = df[data_name[1]].tolist()
@@ -134,13 +134,13 @@ if __name__ == "__main__":
         model_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[-1]), allow_extra_keys=True)
     else:
         model_args, training_args = parser.parse_args_into_dataclasses()
-    tokenizer = AutoTokenizer.from_pretrained("/home/search3/lichunyu/pretrain_model/all-MiniLM-L6-v2")
+    tokenizer = AutoTokenizer.from_pretrained("/home/search3/lichunyu/pretrain_model/k12-all-MiniLM-L6-v2")
     df_train = pd.read_parquet("/home/search3/lichunyu/k12-curriculum-recommendations/data/output/stage2/train/train.pqt")
     df_valid = pd.read_parquet("/home/search3/lichunyu/k12-curriculum-recommendations/data/output/stage2/valid/valid.pqt")
     train_dataset = PairDataset(df_train, tokenizer, data_name=["topic_field", "content_field"])
     valid_dataset = PairDataset(df_valid, tokenizer, data_name=["topic_field", "content_field"])
     model = RerankModel(
-        model_name_or_path="/home/search3/lichunyu/pretrain_model/all-MiniLM-L6-v2",
+        model_name_or_path="/home/search3/lichunyu/pretrain_model/k12-all-MiniLM-L6-v2",
         num_labels=2
     )
     trainer = RerankTrainer(
