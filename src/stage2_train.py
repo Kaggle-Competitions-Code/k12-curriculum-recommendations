@@ -64,8 +64,9 @@ class RerankModel(nn.Module):
         self.model = AutoModel.from_pretrained(model_name_or_path)
         self.classifier = nn.Linear(self.config.hidden_size, num_labels)
 
-    def forward(self, input_ids, attention_mask, token_type_ids, labels=None):
-        model_output = self.model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+    def forward(self, input_ids, attention_mask, token_type_ids=None, labels=None):
+#       model_output = self.model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        model_output = self.model(input_ids=input_ids, attention_mask=attention_mask)
         output = mean_pooling(model_output=model_output, attention_mask=attention_mask)
         logits = self.classifier(output)
         if labels is not None:
@@ -81,7 +82,7 @@ class RerankModel(nn.Module):
 
 class PairDataset(Dataset):
 
-    def __init__(self, df, tokenizer, data_name: list=None, label_name: str="label", max_length=312) -> None:
+    def __init__(self, df, tokenizer, data_name: list=None, label_name: str="label", max_length=64) -> None:
         super().__init__()
         self.data0 = df[data_name[0]].tolist()
         self.data1 = df[data_name[1]].tolist()
@@ -128,19 +129,29 @@ class RerankTrainer(Trainer):
         self.compute_metrics = compute_metrics
 
 
+def add_retrival_feature(df: pd.DataFrame):
+    df["rank"] = df.groupby("topic_id").cumcount()
+    df["rank"] = df["rank"].apply(lambda x: f"[{x}]")
+    df["topic_field"] = df["rank"].str.cat(df["topic_field"])
+    df["content_field"] = df["rank"].str.cat(df["content_field"])
+    return df
+
+
 if __name__ == "__main__":
     parser = HfArgumentParser((ModelArguments, TrainingArguments))
     if len(sys.argv) >= 2 and sys.argv[-1].endswith(".json"):
         model_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[-1]), allow_extra_keys=True)
     else:
         model_args, training_args = parser.parse_args_into_dataclasses()
-    tokenizer = AutoTokenizer.from_pretrained("/home/search3/lichunyu/pretrain_model/k12-all-MiniLM-L6-v2")
+    tokenizer = AutoTokenizer.from_pretrained("/home/search3/lichunyu/pretrain_model/paraphrase-multilingual-mpnet-base-v2")
     df_train = pd.read_parquet("/home/search3/lichunyu/k12-curriculum-recommendations/data/output/stage2/train/train.pqt")
+    df_train = add_retrival_feature(df_train)
     df_valid = pd.read_parquet("/home/search3/lichunyu/k12-curriculum-recommendations/data/output/stage2/valid/valid.pqt")
+    df_valid = add_retrival_feature(df_valid)
     train_dataset = PairDataset(df_train, tokenizer, data_name=["topic_field", "content_field"])
     valid_dataset = PairDataset(df_valid, tokenizer, data_name=["topic_field", "content_field"])
     model = RerankModel(
-        model_name_or_path="/home/search3/lichunyu/pretrain_model/k12-all-MiniLM-L6-v2",
+        model_name_or_path="/home/search3/lichunyu/pretrain_model/paraphrase-multilingual-mpnet-base-v2",
         num_labels=2
     )
     trainer = RerankTrainer(
