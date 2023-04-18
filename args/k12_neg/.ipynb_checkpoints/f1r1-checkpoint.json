@@ -1,0 +1,35 @@
+{
+    "model": "simcse",
+    "output_dir": "/root/autodl-nas/model/f1r1",
+    "author": "yeyang",
+    "model_init_param": {
+        "model_name_or_path": "/root/autodl-nas/model/sentence-transformers/all-MiniLM-L6-v2_new",
+        "roberta": false,
+        "do_mlm": true,
+        "mlp_only_train": true
+    },
+    "collection_param": {
+        "tokenizer_name_or_path": "/root/autodl-nas/model/sentence-transformers/all-MiniLM-L6-v2_new",
+        "train_data_path": "/root/autodl-tmp/data/k12/out/retrieval/retrieval_field_fold_1_shuffled.csv",
+        "max_length": 64
+    },
+    "collator_param": {
+        "tokenizer": "/root/autodl-nas/model/sentence-transformers/all-MiniLM-L6-v2_new"
+    },
+    "num_train_epochs": 12,
+    "do_train": true,
+    "do_eval": false,
+    "per_device_train_batch_size": 64,
+    "per_device_eval_batch_size": 64,
+    "save_strategy": "epoch",
+    "log_level": "info",
+    "logging_strategy": "steps",
+    "logging_steps": 50,
+    "load_best_model_at_end": false,
+    "optim": "adamw_torch",
+    "group_by_length": false,
+    "length_column_name": "length",
+    "save_steps": 100,
+    "save_total_limit": 5,
+    "learning_rate": 5e-5
+}
